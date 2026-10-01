@@ -38,8 +38,9 @@ System erwischen. Die Entitäten selbst bleiben pro Gerät getrennt. Getestet is
 dieser Fall nicht — wer ihn hat, gibt bei jedem Service-Aufruf die `system_id`
 mit.
 
-**Es ist keine offizielle Wolf-Software.** Die genutzte Cloud-Schnittstelle ist
-inoffiziell und kann sich jederzeit ändern.
+**Es ist keine offizielle Wolf-Software.** Genutzt wird die Schnittstelle des
+Wolf-Smartset-Dienstes, an dem die Anlage ohnehin angemeldet ist. Ändert Wolf
+daran etwas, kann es sein, dass HeatWrite nicht mehr läuft.
 
 ## Was sie kann
 
@@ -169,7 +170,11 @@ data:
 Schnittstelle. Ein Home-Assistant-Update kann das brechen. Die Komponente steigt
 in dem Fall mit einer Fehlermeldung aus, statt falsch zu schreiben.
 
-**Die Wolf-API ist inoffiziell.** Sie kann sich jederzeit ändern.
+**Die Smartset-Schnittstelle ist nicht für Fremdsoftware dokumentiert.** Es ist
+Wolfs eigene Schnittstelle, dieselbe, die das Smartset-Portal und die App
+benutzen — aber es gibt keine veröffentlichte Beschreibung und keine Zusage,
+dass sie so bleibt. Ändert Wolf etwas daran, kann es sein, dass HeatWrite nicht
+mehr läuft.
 
 **Min und Max kommen aus der Rohbeschreibung.** Fehlen sie dort, bekommt die
 `number`-Entität einen großzügigen Bereich nach Einheit. Die Regelung lehnt
