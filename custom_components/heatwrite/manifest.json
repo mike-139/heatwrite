@@ -1,0 +1,13 @@
+{
+  "domain": "heatwrite",
+  "name": "HeatWrite",
+  "codeowners": ["@mike-139"],
+  "config_flow": true,
+  "dependencies": ["wolflink"],
+  "documentation": "https://github.com/mike-139/heatwrite",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/mike-139/heatwrite/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

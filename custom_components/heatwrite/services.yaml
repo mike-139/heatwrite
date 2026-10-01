@@ -1,0 +1,114 @@
+set_value:
+  fields:
+    value_id:
+      required: true
+      example: 1234567
+      selector:
+        number:
+          mode: box
+          min: 0
+          max: 999999999999
+    value:
+      required: true
+      example: "12.0"
+      selector:
+        text:
+    system_id:
+      selector:
+        number:
+          mode: box
+          min: 0
+          max: 999999999
+    dry_run:
+      default: false
+      selector:
+        boolean:
+    force:
+      default: false
+      selector:
+        boolean:
+
+set_by_name:
+  fields:
+    name:
+      required: true
+      example: Winter/Sommer Umschaltung
+      selector:
+        text:
+    value:
+      required: true
+      example: "12.0"
+      selector:
+        text:
+    system_id:
+      selector:
+        number:
+          mode: box
+          min: 0
+          max: 999999999
+    dry_run:
+      default: false
+      selector:
+        boolean:
+    force:
+      default: false
+      selector:
+        boolean:
+
+undo:
+  fields:
+    count:
+      default: 1
+      selector:
+        number:
+          mode: box
+          min: 1
+          max: 50
+    dry_run:
+      default: false
+      selector:
+        boolean:
+
+snapshot_create:
+  fields:
+    snapshot:
+      required: true
+      example: inbetriebnahme
+      selector:
+        text:
+
+snapshot_restore:
+  fields:
+    snapshot:
+      required: true
+      example: inbetriebnahme
+      selector:
+        text:
+    dry_run:
+      default: false
+      selector:
+        boolean:
+
+snapshot_delete:
+  fields:
+    snapshot:
+      required: true
+      example: inbetriebnahme
+      selector:
+        text:
+
+reload_parameters:
+
+describe_parameter:
+  fields:
+    value_ids:
+      required: true
+      example: "[34000700000, 36000700001]"
+      selector:
+        object:
+    system_id:
+      selector:
+        number:
+          mode: box
+          min: 0
+          max: 999999999

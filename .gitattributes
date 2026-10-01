@@ -1,0 +1,8 @@
+# Zeilenenden im Repository einheitlich auf LF normalisieren, unabhängig davon
+# unter welchem Betriebssystem und mit welchem Editor bearbeitet wird.
+* text=auto eol=lf
+
+# Binärdateien nicht anfassen.
+*.png binary
+*.jpg binary
+*.zip binary

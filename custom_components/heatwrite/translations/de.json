@@ -1,0 +1,90 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HeatWrite",
+        "description": "Ergänzt die Integration Wolf SmartSet Service um Schreibzugriff. Zugangsdaten werden von dort übernommen — es ist keine Eingabe nötig."
+      }
+    },
+    "abort": {
+      "already_configured": "HeatWrite ist bereits eingerichtet.",
+      "wolflink_missing": "Die Integration Wolf SmartSet Service (wolflink) ist nicht eingerichtet. Bitte zuerst dort anmelden.",
+      "wolflink_not_loaded": "Die Integration Wolf SmartSet Service ist eingerichtet, aber nicht geladen. Bitte prüfen, ob sie fehlerfrei startet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Einstellungen",
+        "data": {
+          "history_limit": "Einträge in der Änderungshistorie",
+          "max_writes_per_hour": "Maximale Schreibvorgänge pro Stunde",
+          "scan_interval": "Abstand der Werteabrufe (Minuten)"
+        },
+        "data_description": {
+          "history_limit": "Ältere Einträge werden verworfen. Die Historie liegt in .storage und überlebt Neustarts.",
+          "max_writes_per_hour": "Schutz gegen Automationsschleifen und EEPROM-Verschleiß der Regelung. Jeder geschriebene Parameter landet im EEPROM der BM-2, und das hat endlich viele Schreibzyklen.",
+          "scan_interval": "Abgerufen werden nur Parameter mit aktivierter Entität. Einstellwerte ändern sich selten, und jeder Abruf geht über die inoffizielle Wolf-Cloud."
+        }
+      }
+    }
+  },
+  "services": {
+    "set_value": {
+      "name": "Wert schreiben",
+      "description": "Schreibt einen Parameter über seine value_id. Ungeprüft — ein Zahlendreher trifft einen anderen Parameter.",
+      "fields": {
+        "value_id": { "name": "value_id", "description": "ID des Parameters. Steht als Attribut an jeder Entität." },
+        "value": { "name": "Wert", "description": "Der neue Wert." },
+        "system_id": { "name": "System-ID", "description": "Nur nötig, wenn mehrere Wolf-Systeme hinterlegt sind." },
+        "dry_run": { "name": "Nur testen", "description": "Meldet, was passieren würde, ohne zu schreiben." },
+        "force": { "name": "Erzwingen", "description": "Schreibt auch, wenn der Parameter als nicht beschreibbar gemeldet wird oder sich der Wert nicht ändert." }
+      }
+    },
+    "set_by_name": {
+      "name": "Wert über Namen schreiben",
+      "description": "Wie Wert schreiben, nur über den Parameternamen statt der ID. Bricht ab, wenn der Name nicht eindeutig ist.",
+      "fields": {
+        "name": { "name": "Parametername", "description": "Exakt wie in der Entitätenliste." },
+        "value": { "name": "Wert", "description": "Der neue Wert." },
+        "system_id": { "name": "System-ID", "description": "Nur nötig, wenn mehrere Wolf-Systeme hinterlegt sind." },
+        "dry_run": { "name": "Nur testen", "description": "Meldet, was passieren würde, ohne zu schreiben." },
+        "force": { "name": "Erzwingen", "description": "Schreibt auch, wenn der Parameter als nicht beschreibbar gemeldet wird." }
+      }
+    },
+    "undo": {
+      "name": "Rückgängig",
+      "description": "Nimmt die letzten Änderungen zurück und schreibt die alten Werte.",
+      "fields": {
+        "count": { "name": "Anzahl", "description": "Wie viele Änderungen zurückgenommen werden." },
+        "dry_run": { "name": "Nur testen", "description": "Meldet, was zurückgenommen würde." }
+      }
+    },
+    "snapshot_create": {
+      "name": "Snapshot anlegen",
+      "description": "Sichert den aktuellen Stand aller beschreibbaren Parameter unter einem Namen.",
+      "fields": {
+        "snapshot": { "name": "Name", "description": "Frei wählbar. Gleicher Name überschreibt." }
+      }
+    },
+    "snapshot_restore": {
+      "name": "Snapshot wiederherstellen",
+      "description": "Schreibt alle abweichenden Werte des Snapshots zurück. Legt vorher automatisch einen Snapshot des Ist-Zustands an.",
+      "fields": {
+        "snapshot": { "name": "Name", "description": "Name des Snapshots." },
+        "dry_run": { "name": "Nur testen", "description": "Listet auf, was geschrieben würde." }
+      }
+    },
+    "snapshot_delete": {
+      "name": "Snapshot löschen",
+      "description": "Entfernt einen gespeicherten Snapshot.",
+      "fields": {
+        "snapshot": { "name": "Name", "description": "Name des Snapshots." }
+      }
+    },
+    "reload_parameters": {
+      "name": "Parameter neu einlesen",
+      "description": "Liest die Parameterliste neu ein, ohne Home Assistant neu zu starten. Nötig, wenn Wolf neue Parameter ausrollt."
+    }
+  }
+}
