@@ -189,6 +189,14 @@ Parameter beim Lesen ab und reißt damit den ganzen Bündelabruf mit. Die
 Komponente fasst dann einzeln nach, merkt sich den Störenfried und lässt ihn
 künftig aus — sichtbar als Warnung im Protokoll.
 
+**Beim Einrichten wird jedes Bündel einmal vollständig gelesen.** Beobachtung
+an zwei Anlagen, ohne gesicherte Erklärung: fragt man einzelne Parameter aus
+einem Bündel ab, das noch nie vollständig gelesen wurde, liefert die Wolf-Cloud
+dafür nichts zurück — stumm, ohne Fehlermeldung. Nach einem vollständigen
+Abruf desselben Bündels klappt es auch einzeln. Deshalb liest die Komponente
+beim Einrichten und bei jedem Neueinlesen der Parameterliste einmal breit; der
+laufende Abruf bleibt danach auf die aktivierten Entitäten beschränkt.
+
 **Manche Parameter liefern gar keinen Wert.** Die API führt dieselbe `value_id`
 mehrfach, je Gruppe in einem anderen Bündel — und nicht jedes davon gibt beim
 Lesen etwas her. HeatWrite fragt mit dem Bündel aus der Rohbeschreibung an,

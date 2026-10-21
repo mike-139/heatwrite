@@ -368,6 +368,17 @@ async def main():
     r = await m.async_write(target, zwilling, 9, source="test")
     check("No-Op greift beim echten Wert wieder", r["ergebnis"] == "unchanged")
 
+    # 14b — Vorwärmen liest jedes Bündel einmal vollständig
+    client.fetches.clear()
+    target.unreadable.add(444)
+    await m._async_warmup(target)
+    gelesen = sorted(sorted(f) for f in client.fetches)
+    check("Vorwärmen geht Bündel für Bündel", gelesen == [[111, 222, 333], [555]])
+    check(
+        "Vorwärmen lässt nicht lesbare Parameter aus",
+        all(444 not in f for f in client.fetches),
+    )
+
     # 15 — Fehlermeldung schlägt ähnliche Namen vor
     try:
         m.find_by_name("Normaußentemperatur Heizkurve")

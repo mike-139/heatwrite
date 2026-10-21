@@ -446,6 +446,43 @@ class WolfWriteManager:
                     len(target.writable),
                 )
 
+        # Außerhalb des Locks: das Vorwärmen holt selbst Werte und würde sich
+        # sonst selbst aussperren.
+        for target in self.targets.values():
+            await self._async_warmup(target)
+
+    async def _async_warmup(self, target: WriteTarget) -> None:
+        """Jedes Bündel einmal vollständig lesen.
+
+        Beobachtung, keine gesicherte Erklärung: fragt man einzelne value_ids
+        aus einem Bündel ab, das noch nie vollständig gelesen wurde, liefert
+        die Wolf-Cloud dafür nichts zurück — stumm, ohne Fehler. Nach einem
+        vollständigen Abruf desselben Bündels klappt es auch einzeln. Deshalb
+        hier einmal breit lesen; der laufende Abruf bleibt danach schmal.
+
+        Bestmöglich, nicht zwingend: schlägt ein Bündel fehl, geht es ohne
+        Umschweife weiter. Einzeln nachzufassen wäre hier zu teuer.
+        """
+        by_bundle: dict[int, list[Any]] = {}
+        for value_id, param in target.parameters.items():
+            if value_id in target.unreadable:
+                continue
+            bundle = target.bundle_of(param)
+            by_bundle.setdefault(bundle, []).append(target.for_read(param, bundle))
+
+        for bundle, params in sorted(by_bundle.items()):
+            try:
+                received = await self._async_fetch_bundle(target, params)
+            except Exception as err:  # noqa: BLE001 — Vorwärmen ist Kür
+                _LOGGER.debug("Bündel %s nicht vorwärmbar: %s", bundle, err)
+                continue
+            _LOGGER.debug(
+                "Bündel %s vorgewärmt: %s von %s Werten",
+                bundle,
+                len(received),
+                len(params),
+            )
+
     async def _async_raw_description(self, target: WriteTarget) -> Any:
         """Die unveränderte Antwort von GetGuiDescriptionForGateway holen."""
         request = getattr(target.client, "_WolfClient__request", None)
@@ -640,16 +677,23 @@ class WolfWriteManager:
                 continue
             target.missing_reported.add(vid)
             param = target.parameters.get(vid)
+            tried = target.bundles_of(param) if param is not None else []
+            if len(tried) > 1:
+                where = "abgefragt in den Bündeln " + ", ".join(str(b) for b in tried)
+            elif tried:
+                where = (
+                    f"abgefragt in Bündel {tried[0]}; ein anderes Bündel führt die "
+                    "API für diesen Parameter nicht"
+                )
+            else:
+                where = "kein Bündel bekannt"
             _LOGGER.warning(
-                "Die Wolf-API liefert für '%s' (value_id %s) keinen Wert — "
-                "abgefragt in Bündel %s. Die Entität bleibt ohne Wert; "
-                "sofern die Parameterbeschreibung einen mitliefert, wird dieser "
-                "angezeigt.",
+                "Die Wolf-API liefert für '%s' (value_id %s) keinen Wert — %s. "
+                "Die Entität bleibt ohne Wert; sofern die Parameterbeschreibung "
+                "einen mitliefert, wird dieser angezeigt.",
                 target.display_name(param) if param is not None else vid,
                 vid,
-                ", ".join(str(b) for b in target.bundles_of(param))
-                if param is not None
-                else "unbekannt",
+                where,
             )
 
     async def _async_fetch_bundle(self, target: WriteTarget, params: list[Any]) -> set[int]:
@@ -977,6 +1021,10 @@ class WolfWriteManager:
         }
         self.snapshots[name] = snapshot
         await self._async_save()
+        # Der Snapshot liest alle beschreibbaren Parameter. Diese Werte sind
+        # frisch — sie gehören sofort an die Entitäten, nicht erst beim
+        # nächsten Abruf.
+        self.coordinator.async_set_updated_data(self._snapshot_of_values())
         async_dispatcher_send(self.hass, SIGNAL_UPDATED)
         _LOGGER.info("Snapshot '%s' mit %s Werten angelegt", name, len(values))
         return {"name": name, "anzahl": len(values)}
