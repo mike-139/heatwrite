@@ -378,6 +378,11 @@ async def main():
         "Vorwärmen lässt nicht lesbare Parameter aus",
         all(444 not in f for f in client.fetches),
     )
+    check("eigene BundleId erkannt", target.has_own_bundle(ws))
+    target.meta[111].bundle_id = None
+    check("fehlende BundleId erkannt", not target.has_own_bundle(ws))
+    check("ohne BundleId gilt die der Bibliothek", target.bundle_of(ws) == 1000)
+    target.meta[111].bundle_id = 1000
 
     # 15 — Fehlermeldung schlägt ähnliche Namen vor
     try:
