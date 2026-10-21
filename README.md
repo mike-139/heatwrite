@@ -189,6 +189,18 @@ Parameter beim Lesen ab und reißt damit den ganzen Bündelabruf mit. Die
 Komponente fasst dann einzeln nach, merkt sich den Störenfried und lässt ihn
 künftig aus — sichtbar als Warnung im Protokoll.
 
+**Manche Parameter liefern gar keinen Wert.** Die API führt dieselbe `value_id`
+mehrfach, je Gruppe in einem anderen Bündel — und nicht jedes davon gibt beim
+Lesen etwas her. HeatWrite fragt mit dem Bündel aus der Rohbeschreibung an,
+demselben, mit dem auch geschrieben wird, und fasst in den übrigen bekannten
+Bündeln nach. Kommt trotzdem nichts, steht das als Warnung im Protokoll, und
+die Entität zeigt ersatzweise den Wert aus der Parameterbeschreibung.
+
+**Der Ersatzwert ist nicht taufrisch.** Er stammt vom letzten Einlesen der
+Parameterbeschreibung, nicht vom letzten Abruf. Die No-Op-Prüfung lässt ihn
+deshalb links liegen: steht ein Parameter laut Ersatzwert schon auf dem
+Zielwert, wird trotzdem geschrieben.
+
 **Du änderst Parameter deiner Heizungsregelung.** Falsch gesetzte
 Fachmann-Parameter können die Anlage ineffizient laufen lassen oder beschädigen.
 Lege vor dem Experimentieren einen Snapshot an.

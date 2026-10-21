@@ -24,7 +24,7 @@
         "data_description": {
           "history_limit": "Ältere Einträge werden verworfen. Die Historie liegt in .storage und überlebt Neustarts.",
           "max_writes_per_hour": "Schutz gegen Automationsschleifen und EEPROM-Verschleiß der Regelung. Jeder geschriebene Parameter landet im EEPROM der BM-2, und das hat endlich viele Schreibzyklen.",
-          "scan_interval": "Abgerufen werden nur Parameter mit aktivierter Entität. Einstellwerte ändern sich selten, und jeder Abruf geht über die inoffizielle Wolf-Cloud."
+          "scan_interval": "Abgerufen werden nur Parameter mit aktivierter Entität. Einstellwerte ändern sich selten, und jeder Abruf geht über die Wolf-Cloud, deren Schnittstelle nicht dokumentiert ist."
         }
       }
     }

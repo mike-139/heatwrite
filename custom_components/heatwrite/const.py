@@ -20,7 +20,8 @@ CONF_SCAN_INTERVAL: Final = "scan_interval"
 DEFAULT_HISTORY_LIMIT: Final = 200
 DEFAULT_MAX_WRITES_PER_HOUR: Final = 20
 # Minuten zwischen zwei Werteabrufen. Einstellparameter ändern sich selten,
-# und jeder Abruf geht über die inoffizielle Wolf-Cloud — deshalb gemächlich.
+# und jeder Abruf geht über die Wolf-Cloud, deren Schnittstelle nicht
+# dokumentiert ist — deshalb gemächlich.
 DEFAULT_SCAN_INTERVAL: Final = 5
 
 # --- Services -------------------------------------------------------------

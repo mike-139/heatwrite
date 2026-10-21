@@ -254,7 +254,12 @@ async def main():
     client.fetches.clear()
     snap = await m.async_snapshot_create("t1")
     # Auch 555 ist beschreibbar (laut Rohdaten), 444 fällt als nicht lesbar raus.
-    check("Snapshot liest alle beschreibbaren nach", client.fetches == [[111, 333, 555]])
+    # Für 555 hat die Attrappe keinen Wert, also wird im zweiten bekannten
+    # Bündel nachgefasst — genau der Fall, der Ralfs Anlage lahmlegt.
+    check(
+        "Snapshot liest alle beschreibbaren nach",
+        client.fetches == [[111, 333, 555], [555]],
+    )
     check("Snapshot erfasst nur Parameter mit Wert", snap["anzahl"] == 2)
 
     # 9 — Ratenbegrenzung
@@ -316,6 +321,64 @@ async def main():
         check("find meldet Unbekanntes", False)
     except HomeAssistantError:
         check("find meldet Unbekanntes", True)
+
+    # 13 — Lesen benutzt dasselbe Bündel wie Schreiben
+    target.meta[555].bundle_ids = (6300, 1000)
+    check("Lesebündel entspricht Schreibbündel", target.bundles_of(zwilling)[0] == 6300)
+    check(
+        "weiteres Bündel steht als Rückfall bereit",
+        target.bundles_of(zwilling)[1:] == [1000],
+    )
+    geliehen = target.for_read(zwilling, 6300)
+    check("Leihgabe trägt das richtige Bündel", geliehen.bundle_id == 6300)
+    check("Leihgabe reicht alles andere durch", geliehen.value_id == 555)
+    check("Original bleibt unangetastet", zwilling.bundle_id == 1000)
+    check(
+        "gleiches Bündel braucht keine Leihgabe",
+        target.for_read(zwilling, 1000) is zwilling,
+    )
+
+    # 13b — kommt im ersten Bündel nichts, wird im zweiten nachgefasst
+    del client.cloud[555]
+    target.values.pop(555, None)
+    target.missing_reported.clear()
+    client.fetches.clear()
+    await m._async_fetch(target, [zwilling])
+    check("ohne Wert wird nachgefasst", client.fetches == [[555], [555]])
+    check("fehlender Wert wird gemeldet", 555 in target.missing_reported)
+    client.fetches.clear()
+    await m._async_fetch(target, [zwilling])
+    check("Meldung kommt nur einmal", 555 in target.missing_reported)
+
+    # 14 — Wert aus der Parameterbeschreibung als letzter Rückfall
+    check("ohne alles kein Wert", target.current_value(zwilling) is None)
+    target.seed_values[555] = "7"
+    check("Beschreibung liefert den Rückfall", target.current_value(zwilling) == "7")
+    check("Rückfall gilt nicht als echter Wert", not target.has_live_value(zwilling))
+    # Der Rückfall darf keinen Schreibvorgang verschlucken: steht er zufällig
+    # auf dem Zielwert, wird trotzdem geschrieben.
+    m._writes = []
+    client.cloud[555] = "7"
+    r = await m.async_write(target, zwilling, 7, source="test")
+    check("No-Op greift beim Rückfall nicht", r["ergebnis"] == "ok")
+    m._writes = []
+    r = await m.async_write(target, zwilling, 9, source="test")
+    check("echter Wert sticht den Rückfall", target.current_value(zwilling) == "9")
+    check("echter Wert gilt als live", target.has_live_value(zwilling))
+    r = await m.async_write(target, zwilling, 9, source="test")
+    check("No-Op greift beim echten Wert wieder", r["ergebnis"] == "unchanged")
+
+    # 15 — Fehlermeldung schlägt ähnliche Namen vor
+    try:
+        m.find_by_name("Normaußentemperatur Heizkurve")
+        check("unbekannter Name meldet Fehler", False)
+    except HomeAssistantError:
+        check("unbekannter Name meldet Fehler", True)
+    try:
+        m.find_by_name("1x Warmwasser (Warmwasser)")
+        check("naher Name wird vorgeschlagen", False)
+    except HomeAssistantError as err:
+        check("naher Name wird vorgeschlagen", "1x Warmwasser" in str(err))
 
     print(f"\n{ok} bestanden, {fail} fehlgeschlagen")
     return fail

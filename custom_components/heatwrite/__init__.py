@@ -129,6 +129,33 @@ class ParamMeta:
     minimum: float | None = None
     maximum: float | None = None
     step: float | None = None
+    # Neue Felder gehören ans Ende: die Reihenfolge ist Teil der Schnittstelle,
+    # solange irgendwer ParamMeta positional baut.
+    #: Alle Bündel, in denen die API diesen Parameter führt. Mehrfach
+    #: vorkommende value_ids stehen je Gruppe in einem anderen Bündel, und
+    #: nicht jedes davon liefert beim Lesen auch einen Wert.
+    bundle_ids: tuple[int, ...] = ()
+    #: Wert aus der Parameterbeschreibung. Die API liefert ihn dort gleich mit,
+    #: er ist aber nur so frisch wie der letzte Abruf der Beschreibung.
+    raw_value: str | None = None
+
+
+class _RebundledParameter:
+    """Ein Parameter mit anderer BundleId, ohne das Original anzufassen.
+
+    ``fetch_value`` gruppiert nach ``param.bundle_id``. Die Bibliothek nimmt
+    bei mehrfach vorkommenden value_ids die zuerst einsortierte Variante —
+    reines Sortierglück. Welches Bündel wirklich gilt, steht in der
+    Rohbeschreibung. Statt am fremden Objekt herumzuschrauben, leihen wir es
+    hier aus und überschreiben nur das Bündel.
+    """
+
+    def __init__(self, param: Any, bundle_id: int) -> None:
+        object.__setattr__(self, "_param", param)
+        object.__setattr__(self, "bundle_id", int(bundle_id))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._param, name)
 
 
 @dataclass
@@ -148,6 +175,13 @@ class WriteTarget:
     #: solcher Parameter lässt den ganzen Bündelabruf scheitern, deshalb
     #: werden sie gemerkt und künftig ausgelassen.
     unreadable: set[int] = field(default_factory=set)
+    #: value_id → Wert aus der Parameterbeschreibung. Letzter Rückfall, wenn
+    #: der eigene Abruf nichts liefert — besser ein Wert vom Einlesezeitpunkt
+    #: als eine dauerhaft graue Entität. Von der No-Op-Prüfung ausgenommen.
+    seed_values: dict[int, str] = field(default_factory=dict)
+    #: value_ids, für die der Abruf stumm nichts zurückgab und die schon
+    #: gemeldet sind — damit die Warnung nicht bei jedem Durchlauf kommt.
+    missing_reported: set[int] = field(default_factory=set)
     #: value_id → Angaben aus der Rohbeschreibung der Wolf-API.
     meta: dict[int, ParamMeta] = field(default_factory=dict)
     #: value_id → Anzeigename. Mehrfach vorkommende Namen bekommen die Gruppe
@@ -163,6 +197,44 @@ class WriteTarget:
         if info is not None and info.bundle_id is not None:
             return int(info.bundle_id)
         return int(param.bundle_id)
+
+    def bundles_of(self, param: Any) -> list[int]:
+        """Alle bekannten Bündel, das maßgebliche zuerst.
+
+        Liefert das erste Bündel keinen Wert, ist das nächste einen Versuch
+        wert: dieselbe value_id steht je Gruppe in einem anderen Bündel.
+        """
+        order: list[int] = [self.bundle_of(param)]
+        info = self.meta.get(int(param.value_id))
+        if info is not None:
+            order.extend(b for b in info.bundle_ids if b not in order)
+        try:
+            library = int(param.bundle_id)
+        except (TypeError, ValueError):
+            library = None
+        if library is not None and library not in order:
+            order.append(library)
+        return order
+
+    def for_read(self, param: Any, bundle_id: int) -> Any:
+        """Den Parameter so ausleihen, dass fetch_value das richtige Bündel nimmt."""
+        try:
+            if int(param.bundle_id) == int(bundle_id):
+                return param
+        except (TypeError, ValueError):
+            pass
+        return _RebundledParameter(param, bundle_id)
+
+    def has_live_value(self, param: Any) -> bool:
+        """Ob ein echter Abrufwert vorliegt — nicht nur der aus der Beschreibung."""
+        vid = int(param.value_id)
+        if vid in self.values:
+            return True
+        data = self.coordinator.data or {}
+        entry = data.get(param.parameter_id)
+        if entry and entry[0] == param.value_id:
+            return True
+        return any(value_id == param.value_id for value_id, _ in data.values())
 
     def limits(self, param: Any) -> tuple[float | None, float | None, float | None]:
         info = self.meta.get(int(param.value_id))
@@ -217,7 +289,9 @@ class WriteTarget:
         """Aktuellen Wert eines Parameters lesen.
 
         Zuerst aus dem eigenen Abruf, dann als Rückfall aus den Daten von
-        wolflink — die decken die Benutzerebene ohne Zusatzaufwand ab.
+        wolflink — die decken die Benutzerebene ohne Zusatzaufwand ab —, und
+        zuletzt aus der Parameterbeschreibung. Der letzte Rückfall ist nur so
+        frisch wie das letzte Einlesen; ``has_live_value`` unterscheidet das.
         """
         own = self.values.get(int(param.value_id))
         if own is not None:
@@ -230,6 +304,10 @@ class WriteTarget:
         for value_id, value in data.values():
             if value_id == param.value_id:
                 return str(value)
+
+        seed = self.seed_values.get(int(param.value_id))
+        if seed is not None:
+            return str(seed)
         return None
 
 
@@ -404,11 +482,17 @@ class WolfWriteManager:
             return
 
         meta: dict[int, ParamMeta] = {}
+        bundles: dict[int, list[int]] = {}
         for descriptor in WolfClient._extract_parameter_descriptors(description):
             value_id = descriptor.get("ValueId")
             if value_id is None or int(value_id) not in target.parameters:
                 continue
             value_id = int(value_id)
+            bundle = descriptor.get("BundleId")
+            if bundle is not None:
+                seen = bundles.setdefault(value_id, [])
+                if int(bundle) not in seen:
+                    seen.append(int(bundle))
             candidate = ParamMeta(
                 name=(str(descriptor["Name"]).strip() if descriptor.get("Name") else None),
                 prefix=(
@@ -422,12 +506,28 @@ class WolfWriteManager:
                 minimum=_number(descriptor.get("MinValue")),
                 maximum=_number(descriptor.get("MaxValue")),
                 step=_number(descriptor.get("StepWidth")),
+                raw_value=(
+                    None if descriptor.get("Value") is None else str(descriptor["Value"])
+                ),
             )
             known = meta.get(value_id)
             if known is None or (known.read_only and not candidate.read_only):
+                # Ein Wert aus einer anderen Variante geht nicht verloren,
+                # nur weil diese ihn nicht mitliefert.
+                if candidate.raw_value is None and known is not None:
+                    candidate.raw_value = known.raw_value
                 meta[value_id] = candidate
+            elif known.raw_value is None and candidate.raw_value is not None:
+                known.raw_value = candidate.raw_value
+
+        for value_id, info in meta.items():
+            info.bundle_ids = tuple(bundles.get(value_id, ()))
 
         target.meta = meta
+        target.seed_values = {
+            vid: info.raw_value for vid, info in meta.items() if info.raw_value is not None
+        }
+        target.missing_reported.clear()
         freed = sum(
             1
             for vid, param in target.parameters.items()
@@ -507,12 +607,66 @@ class WolfWriteManager:
             await self._async_refresh_values(target, [param])
 
     async def _async_fetch(self, target: WriteTarget, params: list[Any]) -> None:
+        """Werte holen — mit dem Bündel aus der Rohbeschreibung.
+
+        ``fetch_value`` gruppiert nach ``param.bundle_id``; die Bibliothek hat
+        dort bei doppelten value_ids nur zufällig das richtige stehen. Welches
+        Bündel gilt, sagt die Rohbeschreibung — dasselbe, mit dem auch
+        geschrieben wird. Bleibt ein Parameter danach ohne Wert, ist das
+        nächste bekannte Bündel einen Versuch wert.
+        """
+        wanted = {int(p.value_id) for p in params}
+        got = await self._async_fetch_bundle(
+            target, [target.for_read(p, target.bundles_of(p)[0]) for p in params]
+        )
+
+        missing = wanted - got
+        if missing:
+            retries: list[Any] = []
+            for param in params:
+                vid = int(param.value_id)
+                if vid not in missing:
+                    continue
+                for bundle in target.bundles_of(param)[1:]:
+                    retries.append(target.for_read(param, bundle))
+            if retries:
+                try:
+                    got |= await self._async_fetch_bundle(target, retries)
+                except Exception as err:  # noqa: BLE001 — Nachfassen ist Kür
+                    _LOGGER.debug("Nachfassen in weiteren Bündeln fehlgeschlagen: %s", err)
+
+        for vid in sorted(wanted - got):
+            if vid in target.missing_reported:
+                continue
+            target.missing_reported.add(vid)
+            param = target.parameters.get(vid)
+            _LOGGER.warning(
+                "Die Wolf-API liefert für '%s' (value_id %s) keinen Wert — "
+                "abgefragt in Bündel %s. Die Entität bleibt ohne Wert; "
+                "sofern die Parameterbeschreibung einen mitliefert, wird dieser "
+                "angezeigt.",
+                target.display_name(param) if param is not None else vid,
+                vid,
+                ", ".join(str(b) for b in target.bundles_of(param))
+                if param is not None
+                else "unbekannt",
+            )
+
+    async def _async_fetch_bundle(self, target: WriteTarget, params: list[Any]) -> set[int]:
+        """Einen Satz Parameter abrufen. Gibt die value_ids zurück, die kamen."""
+        if not params:
+            return set()
         async with self._lock:
             values = await target.client.fetch_value(
                 target.gateway_id, target.system_id, list(params)
             )
+        received: set[int] = set()
         for value in values:
-            target.values[int(value.value_id)] = str(value.value)
+            vid = int(value.value_id)
+            target.values[vid] = str(value.value)
+            target.missing_reported.discard(vid)
+            received.add(vid)
+        return received
 
     # --- Rohdaten der Parameterbeschreibung -------------------------------
 
@@ -590,6 +744,28 @@ class WolfWriteManager:
 
         hits = [(t, p) for t, p in candidates if p.name.strip().casefold() == needle]
         if not hits:
+            # Der Anzeigename trägt oft einen Zusatz — die Gruppe bei doppelten
+            # Namen, Wolfs Parameternummer davor. Wer ihn abtippt, trifft
+            # daneben. Also die naheliegenden Treffer nennen.
+            near = [
+                t.display_name(p)
+                for t, p in candidates
+                if needle in t.display_name(p).strip().casefold()
+            ]
+            if not near:
+                words = [w for w in needle.split() if len(w) > 3]
+                near = [
+                    t.display_name(p)
+                    for t, p in candidates
+                    if any(w in t.display_name(p).casefold() for w in words)
+                ]
+            if near:
+                shown = ", ".join(f"'{n}'" for n in sorted(set(near))[:8])
+                raise HomeAssistantError(
+                    f"Kein Parameter heißt genau '{name}'. Gemeint sein kann: "
+                    f"{shown}. Der Name muss exakt der Entität entsprechen, "
+                    "ohne den Gerätenamen davor."
+                )
             raise HomeAssistantError(f"Kein Parameter mit dem Namen '{name}' gefunden.")
         if len(hits) > 1:
             variants = ", ".join(f"'{t.display_name(p)}'" for t, p in hits)
@@ -668,7 +844,17 @@ class WolfWriteManager:
                 "beschreibbar. Mit force: true lässt sich der Versuch erzwingen."
             )
 
-        if old_state is not None and old_state == new_state and not force and not bypass_noop:
+        # Ein Wert, der nur aus der Parameterbeschreibung stammt, ist vom
+        # Einlesezeitpunkt. Darauf darf die No-Op-Prüfung nicht bauen, sonst
+        # unterbleibt ein nötiger Schreibvorgang wegen eines veralteten Werts.
+        live = target.has_live_value(param)
+        if (
+            old_state is not None
+            and old_state == new_state
+            and live
+            and not force
+            and not bypass_noop
+        ):
             record["ergebnis"] = RESULT_UNCHANGED
             _LOGGER.debug(
                 "'%s' steht bereits auf %s — kein Schreibvorgang (EEPROM-Schonung)",

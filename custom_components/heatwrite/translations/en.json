@@ -24,7 +24,7 @@
         "data_description": {
           "history_limit": "Older entries are dropped. The history lives in .storage and survives restarts.",
           "max_writes_per_hour": "Guards against automation loops and EEPROM wear. Every written parameter goes into the BM-2's EEPROM, which has a finite number of write cycles.",
-          "scan_interval": "Only parameters with an enabled entity are read. Settings rarely change, and every read goes through the unofficial Wolf cloud."
+          "scan_interval": "Only parameters with an enabled entity are read. Settings rarely change, and every read goes through the Wolf cloud, whose interface is undocumented."
         }
       }
     }
