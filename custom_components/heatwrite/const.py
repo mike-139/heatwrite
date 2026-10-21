@@ -33,6 +33,7 @@ SERVICE_SNAPSHOT_RESTORE: Final = "snapshot_restore"
 SERVICE_SNAPSHOT_DELETE: Final = "snapshot_delete"
 SERVICE_RELOAD_PARAMETERS: Final = "reload_parameters"
 SERVICE_DESCRIBE_PARAMETER: Final = "describe_parameter"
+SERVICE_DESCRIBE_VALUES: Final = "describe_values"
 
 # --- Service-Felder -------------------------------------------------------
 ATTR_VALUE_ID: Final = "value_id"

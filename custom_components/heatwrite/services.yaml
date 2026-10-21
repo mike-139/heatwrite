@@ -112,3 +112,28 @@ describe_parameter:
           mode: box
           min: 0
           max: 999999999
+
+describe_values:
+  fields:
+    value_ids:
+      required: true
+      example: "[34000700000, 36000700001]"
+      selector:
+        object:
+    bundle_id:
+      example: 6300
+      selector:
+        number:
+          mode: box
+          min: 0
+          max: 999999
+    sub_bundle:
+      default: false
+      selector:
+        boolean:
+    system_id:
+      selector:
+        number:
+          mode: box
+          min: 0
+          max: 999999999

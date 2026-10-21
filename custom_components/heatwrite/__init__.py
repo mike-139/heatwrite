@@ -53,6 +53,7 @@ from .const import (
     RESULT_OK,
     RESULT_UNCHANGED,
     SERVICE_DESCRIBE_PARAMETER,
+    SERVICE_DESCRIBE_VALUES,
     SERVICE_RELOAD_PARAMETERS,
     SERVICE_SET_BY_NAME,
     SERVICE_SET_VALUE,
@@ -224,6 +225,16 @@ class WriteTarget:
         except (TypeError, ValueError):
             pass
         return _RebundledParameter(param, bundle_id)
+
+    def has_own_bundle(self, param: Any) -> bool:
+        """Ob die Beschreibung für den Parameter überhaupt eine BundleId nennt.
+
+        Fehlt sie, setzt die Bibliothek 1000 ein — ihren Vorgabewert. Der
+        Parameter landet dann in einem Bündel, in das er nicht gehört, und ein
+        Abruf dort geht ins Leere.
+        """
+        info = self.meta.get(int(param.value_id))
+        return info is not None and info.bundle_id is not None
 
     def has_live_value(self, param: Any) -> bool:
         """Ob ein echter Abrufwert vorliegt — nicht nur der aus der Beschreibung."""
@@ -482,6 +493,22 @@ class WolfWriteManager:
                 len(received),
                 len(params),
             )
+            fehlend = [p for p in params if int(p.value_id) not in received]
+            if fehlend:
+                _LOGGER.debug(
+                    "Bündel %s ohne Wert für: %s",
+                    bundle,
+                    "; ".join(
+                        "{} ({}){}".format(
+                            target.display_name(target.parameters[int(p.value_id)]),
+                            int(p.value_id),
+                            ""
+                            if target.has_own_bundle(p)
+                            else " — ohne BundleId in der Beschreibung",
+                        )
+                        for p in fehlend
+                    ),
+                )
 
     async def _async_raw_description(self, target: WriteTarget) -> Any:
         """Die unveränderte Antwort von GetGuiDescriptionForGateway holen."""
@@ -756,6 +783,81 @@ class WolfWriteManager:
                 + ", ".join(str(v) for v in sorted(wanted))
             )
         return {"parameter": found, "anzahl": len(found)}
+
+    async def async_describe_values(
+        self,
+        value_ids: list[int],
+        system_id: int | None = None,
+        bundle_id: int | None = None,
+        sub_bundle: bool = False,
+    ) -> dict[str, Any]:
+        """Die unveränderte Antwort von GetParameterValues ausgeben.
+
+        Die Bibliothek wirft jeden Eintrag weg, der kein Feld ``Value`` hat —
+        samt dem ``State``, der danebensteht. Genau diese Einträge sind der
+        Grund, warum ein Parameter stumm ohne Wert bleibt. Hier kommt die
+        Antwort ungefiltert heraus.
+        """
+        wanted = [int(v) for v in value_ids]
+        antworten: list[dict[str, Any]] = []
+
+        for target in self.targets.values():
+            if system_id is not None and target.system_id != int(system_id):
+                continue
+            vorhanden = [v for v in wanted if v in target.parameters]
+            if not vorhanden:
+                continue
+
+            if bundle_id is not None:
+                buendel = {int(bundle_id): vorhanden}
+            else:
+                buendel = {}
+                for value_id in vorhanden:
+                    bundle = target.bundle_of(target.parameters[value_id])
+                    buendel.setdefault(bundle, []).append(value_id)
+
+            request = getattr(target.client, "_WolfClient__request", None)
+            if request is None:
+                raise HomeAssistantError(
+                    "Der Rohabruf ist nicht möglich — die Bibliothek wolf_comm "
+                    "hat sich geändert."
+                )
+
+            for bundle, ids in sorted(buendel.items()):
+                anfrage = {
+                    "BundleId": bundle,
+                    "IsSubBundle": bool(sub_bundle),
+                    "ValueIdList": ids,
+                    "GatewayId": target.gateway_id,
+                    "SystemId": target.system_id,
+                    "GuiIdChanged": False,
+                    "SessionId": getattr(target.client, "session_id", None),
+                    "LastAccess": None,
+                }
+                eintrag: dict[str, Any] = {
+                    "system_id": target.system_id,
+                    "bundle_id": bundle,
+                    "is_sub_bundle": bool(sub_bundle),
+                    "angefragt": ids,
+                }
+                try:
+                    async with self._lock:
+                        eintrag["antwort"] = await request(
+                            "post",
+                            "api/portal/GetParameterValues",
+                            json=anfrage,
+                            headers={"Content-Type": "application/json"},
+                        )
+                except Exception as err:  # noqa: BLE001 — der Fehler ist das Ergebnis
+                    eintrag["fehler"] = f"{type(err).__name__}: {err}"
+                antworten.append(eintrag)
+
+        if not antworten:
+            raise HomeAssistantError(
+                "Keine dieser value_ids ist bekannt: "
+                + ", ".join(str(v) for v in sorted(set(wanted)))
+            )
+        return {"abfragen": antworten, "anzahl": len(antworten)}
 
     # --- Suche ------------------------------------------------------------
 
@@ -1185,6 +1287,15 @@ def _async_register_services(hass: HomeAssistant) -> None:
             call.data[ATTR_VALUE_IDS], call.data.get(ATTR_SYSTEM_ID)
         )
 
+    async def describe_values(call: ServiceCall) -> ServiceResponse:
+        manager = _manager(hass)
+        return await manager.async_describe_values(
+            call.data[ATTR_VALUE_IDS],
+            call.data.get(ATTR_SYSTEM_ID),
+            call.data.get("bundle_id"),
+            call.data.get("sub_bundle", False),
+        )
+
     async def reload_parameters(call: ServiceCall) -> None:
         # Der Reload des Config-Entries ruft async_discover() erneut auf und
         # liest die Parameterliste damit ohnehin neu ein.
@@ -1264,6 +1375,22 @@ def _async_register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_RELOAD_PARAMETERS, reload_parameters, schema=vol.Schema({})
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DESCRIBE_VALUES,
+        describe_values,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_VALUE_IDS): vol.All(
+                    cv.ensure_list, [vol.Coerce(int)], vol.Length(min=1, max=50)
+                ),
+                vol.Optional(ATTR_SYSTEM_ID): vol.Coerce(int),
+                vol.Optional("bundle_id"): vol.Coerce(int),
+                vol.Optional("sub_bundle", default=False): cv.boolean,
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
     )
     hass.services.async_register(
         DOMAIN,

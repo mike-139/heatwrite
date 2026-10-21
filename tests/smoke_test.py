@@ -384,6 +384,32 @@ async def main():
     check("ohne BundleId gilt die der Bibliothek", target.bundle_of(ws) == 1000)
     target.meta[111].bundle_id = 1000
 
+    # 14c — Rohabfrage der Werte: die Antwort kommt ungefiltert heraus
+    class RohClient:
+        """Attrappe für den privaten __request der Bibliothek."""
+
+        def __init__(self):
+            self.aufrufe = []
+            self.session_id = "sid-1"
+
+        async def _WolfClient__request(self, method, path, **kw):
+            self.aufrufe.append((method, path, kw.get("json")))
+            return {"Values": [{"ValueId": 111, "State": 3}], "LastAccess": "x"}
+
+    roh = RohClient()
+    target.client = roh
+    antwort = await m.async_describe_values([111])
+    target.client = client
+    anfrage = roh.aufrufe[0][2]
+    check("Rohabfrage geht an GetParameterValues", roh.aufrufe[0][1].endswith("GetParameterValues"))
+    check("Rohabfrage nimmt das Bündel aus den Rohdaten", anfrage["BundleId"] == 1000)
+    check("Rohabfrage schickt die value_id", anfrage["ValueIdList"] == [111])
+    check("Rohabfrage reicht IsSubBundle durch", anfrage["IsSubBundle"] is False)
+    check(
+        "Eintrag ohne Value bleibt sichtbar",
+        antwort["abfragen"][0]["antwort"]["Values"][0]["State"] == 3,
+    )
+
     # 15 — Fehlermeldung schlägt ähnliche Namen vor
     try:
         m.find_by_name("Normaußentemperatur Heizkurve")
