@@ -410,6 +410,47 @@ async def main():
         antwort["abfragen"][0]["antwort"]["Values"][0]["State"] == 3,
     )
 
+    # 14d — Fachmann-Anmeldung
+    class ExpertClient(RohClient):
+        def __init__(self, fehler=False):
+            super().__init__()
+            self.fehler = fehler
+
+        async def _WolfClient__request(self, method, path, **kw):
+            self.aufrufe.append((method, path, kw.get("params")))
+            if self.fehler:
+                raise RuntimeError("Anmeldung mit Password=1111 abgelehnt")
+            return {}
+
+    exp = ExpertClient()
+    target.client = exp
+    m.entry.options = {}
+    await m._async_expert_login()
+    check("Fachmann-Anmeldung wird aufgerufen", len(exp.aufrufe) == 1)
+    check("Pfad stimmt", exp.aufrufe[0][1] == "api/portal/ExpertLogin")
+    check("Werkscode 1111 wird benutzt", exp.aufrufe[0][2] == {"Password": "1111"})
+
+    exp2 = ExpertClient()
+    target.client = exp2
+    m.entry.options = {"expert_password": "2468"}
+    await m._async_expert_login()
+    check("eigener Code wird benutzt", exp2.aufrufe[0][2] == {"Password": "2468"})
+
+    exp3 = ExpertClient()
+    target.client = exp3
+    m.entry.options = {"expert_password": ""}
+    await m._async_expert_login()
+    check("leerer Code schaltet ab", exp3.aufrufe == [])
+
+    m.entry.options = {"expert_password": "1111"}
+    check("Code wird maskiert", "1111" not in m._mask("Password=1111 abgelehnt"))
+    exp4 = ExpertClient(fehler=True)
+    target.client = exp4
+    await m._async_expert_login()
+    check("Fehler bei der Anmeldung bricht nichts ab", True)
+    target.client = client
+    m.entry.options = {}
+
     # 15 — Fehlermeldung schlägt ähnliche Namen vor
     try:
         m.find_by_name("Normaußentemperatur Heizkurve")

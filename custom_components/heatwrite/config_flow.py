@@ -16,9 +16,11 @@ from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
+    CONF_EXPERT_PASSWORD,
     CONF_HISTORY_LIMIT,
     CONF_MAX_WRITES_PER_HOUR,
     CONF_SCAN_INTERVAL,
+    DEFAULT_EXPERT_PASSWORD,
     DEFAULT_HISTORY_LIMIT,
     DEFAULT_MAX_WRITES_PER_HOUR,
     DEFAULT_SCAN_INTERVAL,
@@ -81,6 +83,13 @@ class WolfWriteOptionsFlow(OptionsFlow):
                     CONF_SCAN_INTERVAL,
                     default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                 ): vol.All(cv.positive_int, vol.Range(min=1, max=120)),
+                # Leer lassen schaltet die Fachmann-Anmeldung ab.
+                vol.Optional(
+                    CONF_EXPERT_PASSWORD,
+                    default=options.get(
+                        CONF_EXPERT_PASSWORD, DEFAULT_EXPERT_PASSWORD
+                    ),
+                ): vol.All(cv.string, vol.Length(max=30)),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

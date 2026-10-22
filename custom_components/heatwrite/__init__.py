@@ -41,9 +41,11 @@ from .const import (
     ATTR_VALUE,
     ATTR_VALUE_ID,
     ATTR_VALUE_IDS,
+    CONF_EXPERT_PASSWORD,
     CONF_HISTORY_LIMIT,
     CONF_MAX_WRITES_PER_HOUR,
     CONF_SCAN_INTERVAL,
+    DEFAULT_EXPERT_PASSWORD,
     DEFAULT_HISTORY_LIMIT,
     DEFAULT_MAX_WRITES_PER_HOUR,
     DEFAULT_SCAN_INTERVAL,
@@ -367,6 +369,25 @@ class WolfWriteManager:
     def scan_interval(self) -> int:
         return int(self.entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
 
+    @property
+    def expert_password(self) -> str:
+        return str(
+            self.entry.options.get(CONF_EXPERT_PASSWORD, DEFAULT_EXPERT_PASSWORD)
+        ).strip()
+
+    def _mask(self, text: Any) -> str:
+        """Den Fachmann-Code aus einer Meldung entfernen.
+
+        Wolf überträgt ihn als Klartext im Query-String. Taucht eine solche
+        URL in einer Fehlermeldung auf, landet der Code sonst in jedem
+        Protokoll, das jemand ins Forum kopiert.
+        """
+        out = str(text)
+        code = self.expert_password
+        if code:
+            out = out.replace(code, "****")
+        return out
+
     # --- Aufbau -----------------------------------------------------------
 
     async def async_load(self) -> None:
@@ -428,6 +449,10 @@ class WolfWriteManager:
         sieht deshalb nur die Benutzerebene. Wir schalten das Attribut für die
         Dauer des Abrufs um und setzen es garantiert zurück.
         """
+        # Vor dem Einlesen: die Sitzung als Fachmann freischalten, damit auch
+        # geschützte Parameter mit Wert geliefert werden.
+        await self._async_expert_login()
+
         async with self._lock:
             for target in self.targets.values():
                 client = target.client
@@ -461,6 +486,49 @@ class WolfWriteManager:
         # sonst selbst aussperren.
         for target in self.targets.values():
             await self._async_warmup(target)
+
+    async def _async_expert_login(self) -> None:
+        """Die Sitzung als Fachmann freischalten.
+
+        Smart Set ruft beim Eingeben des Fachmann-Codes
+        ``api/portal/ExpertLogin?Password=…`` auf. Parameter, die die
+        Beschreibung als ``IsExpertProtectable`` meldet, gibt die Cloud einer
+        nicht freigeschalteten Sitzung offenbar nicht heraus — sie antwortet
+        dann mit ``State: 0`` und ohne Wert.
+
+        Bestmöglich: schlägt es fehl, läuft alles Übrige weiter. Anlagen ohne
+        geschützte Parameter brauchen es ohnehin nicht.
+        """
+        code = self.expert_password
+        if not code:
+            return
+
+        erledigt: set[int] = set()
+        for target in self.targets.values():
+            client = target.client
+            # Mehrere Anlagen teilen sich denselben Client; die Freischaltung
+            # hängt an der Sitzung, nicht an der Anlage.
+            if id(client) in erledigt:
+                continue
+            erledigt.add(id(client))
+
+            request = getattr(client, "_WolfClient__request", None)
+            if request is None:
+                _LOGGER.debug(
+                    "Kein Rohzugriff auf die Bibliothek — Fachmann-Anmeldung "
+                    "übersprungen"
+                )
+                continue
+            try:
+                await request(
+                    "get", "api/portal/ExpertLogin", params={"Password": code}
+                )
+            except Exception as err:  # noqa: BLE001 — Freischaltung ist Kür
+                _LOGGER.warning(
+                    "Fachmann-Anmeldung fehlgeschlagen: %s", self._mask(err)
+                )
+            else:
+                _LOGGER.debug("Fachmann-Anmeldung durchgeführt")
 
     async def _async_warmup(self, target: WriteTarget) -> None:
         """Jedes Bündel einmal vollständig lesen.

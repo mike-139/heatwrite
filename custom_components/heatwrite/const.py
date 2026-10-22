@@ -24,6 +24,12 @@ DEFAULT_MAX_WRITES_PER_HOUR: Final = 20
 # dokumentiert ist — deshalb gemächlich.
 DEFAULT_SCAN_INTERVAL: Final = 5
 
+# Fachmann-Code der Wolf-Regelung. Smart Set schaltet damit die Sitzung frei;
+# Parameter mit 'IsExpertProtectable' gibt die Cloud sonst nicht heraus.
+# Werkseinstellung bei Wolf ist 1111.
+CONF_EXPERT_PASSWORD: Final = "expert_password"
+DEFAULT_EXPERT_PASSWORD: Final = "1111"
+
 # --- Services -------------------------------------------------------------
 SERVICE_SET_VALUE: Final = "set_value"
 SERVICE_SET_BY_NAME: Final = "set_by_name"

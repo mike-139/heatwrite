@@ -117,6 +117,27 @@ drückbar, wenn es etwas zurückzunehmen gibt) und **Snapshot anlegen**.
 Was die Wolf-API als schreibgeschützt meldet, gibt es nur lesend — das betrifft
 auch Werte, die in Smart Set einstellbar aussehen.
 
+## Fachmann-Code
+
+Smart Set schaltet seinen Fachmann-Bereich über einen Code frei und ruft dabei
+`api/portal/ExpertLogin` auf. Die Parameterbeschreibung kennzeichnet einzelne
+Parameter als `IsExpertProtectable`; für diese liefert die Wolf-Cloud einer
+nicht freigeschalteten Sitzung keinen Wert, sondern nur `State: 0`.
+
+HeatWrite führt diese Freischaltung beim Einrichten und bei jedem Neueinlesen
+der Parameterliste durch. Der Code steht in den Optionen und ist mit **1111**
+vorbelegt — das ist die Werkseinstellung von Wolf. Wurde er an der Anlage
+geändert, gehört der eigene hier hinein. Ein leeres Feld schaltet die
+Freischaltung ab.
+
+Anlagen, bei denen kein Parameter als geschützt gemeldet wird, brauchen das
+nicht; dort ändert sich dadurch nichts.
+
+**Zum Umgang mit dem Code:** Wolf überträgt ihn im Klartext als Teil der URL.
+HeatWrite ersetzt ihn in eigenen Protokollmeldungen durch `****`. Wer ein
+Debug-Protokoll weitergibt, sollte es trotzdem vorher durchsehen — andere
+Komponenten protokollieren Anfragen womöglich ungefiltert.
+
 ## Services
 
 | Service | Zweck |
@@ -189,20 +210,28 @@ Parameter beim Lesen ab und reißt damit den ganzen Bündelabruf mit. Die
 Komponente fasst dann einzeln nach, merkt sich den Störenfried und lässt ihn
 künftig aus — sichtbar als Warnung im Protokoll.
 
-**Beim Einrichten wird jedes Bündel einmal vollständig gelesen.** Beobachtung
-an zwei Anlagen, ohne gesicherte Erklärung: fragt man einzelne Parameter aus
-einem Bündel ab, das noch nie vollständig gelesen wurde, liefert die Wolf-Cloud
-dafür nichts zurück — stumm, ohne Fehlermeldung. Nach einem vollständigen
-Abruf desselben Bündels klappt es auch einzeln. Deshalb liest die Komponente
-beim Einrichten und bei jedem Neueinlesen der Parameterliste einmal breit; der
-laufende Abruf bleibt danach auf die aktivierten Entitäten beschränkt.
+**Manche Parameter liefern keinen Wert — dafür gibt es keine verlässliche
+Abhilfe.** Die Wolf-API weist solche Parameter nicht ab, sie liefert für sie
+schlicht nichts, ohne Fehlermeldung. Die betroffene Entität steht dann auf
+„nicht verfügbar", obwohl Smart Set einen Wert anzeigt. Beobachtet an zwei
+Anlagen, Ursache unbekannt. Was HeatWrite tut:
 
-**Manche Parameter liefern gar keinen Wert.** Die API führt dieselbe `value_id`
-mehrfach, je Gruppe in einem anderen Bündel — und nicht jedes davon gibt beim
-Lesen etwas her. HeatWrite fragt mit dem Bündel aus der Rohbeschreibung an,
-demselben, mit dem auch geschrieben wird, und fasst in den übrigen bekannten
-Bündeln nach. Kommt trotzdem nichts, steht das als Warnung im Protokoll, und
-die Entität zeigt ersatzweise den Wert aus der Parameterbeschreibung.
+* Es fragt mit der `BundleId` aus der Rohbeschreibung an, derselben, mit der
+  auch geschrieben wird. Führt die API dieselbe `value_id` mehrfach in
+  verschiedenen Bündeln, fasst es in den übrigen nach.
+* Es liest beim Einrichten und bei jedem Neueinlesen einmal jedes Bündel
+  vollständig. Das sorgt vor allem dafür, dass Werte gleich nach dem Start
+  bereitstehen statt erst nach dem ersten Abruf.
+* Bleibt ein Parameter ohne Wert, steht das als Warnung im Protokoll, mit
+  `value_id` und den abgefragten Bündeln. Liefert die Parameterbeschreibung
+  einen Wert mit, zeigt die Entität diesen ersatzweise an.
+
+Keiner dieser Punkte ist eine Reparatur. In einem beobachteten Fall kamen die
+Werte nach rund anderthalb Stunden von selbst zurück; ob die Eingriffe daran
+beteiligt waren, ließ sich nicht nachweisen. Ein Bündel blieb über mehrere
+vollständige Abrufe hinweg leer — vermutlich Parameter für Komponenten, die
+die Anlage gar nicht hat. Die Warnung im Protokoll ist deshalb als
+Diagnosehilfe gedacht, nicht als Hinweis auf einen behebbaren Fehler.
 
 **Der Ersatzwert ist nicht taufrisch.** Er stammt vom letzten Einlesen der
 Parameterbeschreibung, nicht vom letzten Abruf. Die No-Op-Prüfung lässt ihn

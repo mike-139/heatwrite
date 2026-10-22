@@ -19,12 +19,14 @@
         "data": {
           "history_limit": "Entries kept in the change history",
           "max_writes_per_hour": "Maximum writes per hour",
-          "scan_interval": "Interval between value reads (minutes)"
+          "scan_interval": "Interval between value reads (minutes)",
+          "expert_password": "Installer code"
         },
         "data_description": {
           "history_limit": "Older entries are dropped. The history lives in .storage and survives restarts.",
           "max_writes_per_hour": "Guards against automation loops and EEPROM wear. Every written parameter goes into the BM-2's EEPROM, which has a finite number of write cycles.",
-          "scan_interval": "Only parameters with an enabled entity are read. Settings rarely change, and every read goes through the Wolf cloud, whose interface is undocumented."
+          "scan_interval": "Only parameters with an enabled entity are read. Settings rarely change, and every read goes through the Wolf cloud, whose interface is undocumented.",
+          "expert_password": "Unlocks the session like the installer area in Smart Set. Wolf's factory default is 1111. Only needed for parameters the Wolf API reports as protected — leave empty to disable."
         }
       }
     }
@@ -34,52 +36,100 @@
       "name": "Write value",
       "description": "Writes a parameter by its value_id. Unchecked — a typo hits a different parameter.",
       "fields": {
-        "value_id": { "name": "value_id", "description": "Parameter ID, exposed as an attribute on every entity." },
-        "value": { "name": "Value", "description": "The new value." },
-        "system_id": { "name": "System ID", "description": "Only needed with more than one Wolf system." },
-        "dry_run": { "name": "Dry run", "description": "Reports what would happen without writing." },
-        "force": { "name": "Force", "description": "Writes even when the parameter is reported read-only or the value is unchanged." }
+        "value_id": {
+          "name": "value_id",
+          "description": "Parameter ID, exposed as an attribute on every entity."
+        },
+        "value": {
+          "name": "Value",
+          "description": "The new value."
+        },
+        "system_id": {
+          "name": "System ID",
+          "description": "Only needed with more than one Wolf system."
+        },
+        "dry_run": {
+          "name": "Dry run",
+          "description": "Reports what would happen without writing."
+        },
+        "force": {
+          "name": "Force",
+          "description": "Writes even when the parameter is reported read-only or the value is unchanged."
+        }
       }
     },
     "set_by_name": {
       "name": "Write value by name",
       "description": "Like Write value, but addressed by parameter name. Aborts if the name is ambiguous.",
       "fields": {
-        "name": { "name": "Parameter name", "description": "Exactly as shown in the entity list." },
-        "value": { "name": "Value", "description": "The new value." },
-        "system_id": { "name": "System ID", "description": "Only needed with more than one Wolf system." },
-        "dry_run": { "name": "Dry run", "description": "Reports what would happen without writing." },
-        "force": { "name": "Force", "description": "Writes even when the parameter is reported read-only." }
+        "name": {
+          "name": "Parameter name",
+          "description": "Exactly as shown in the entity list."
+        },
+        "value": {
+          "name": "Value",
+          "description": "The new value."
+        },
+        "system_id": {
+          "name": "System ID",
+          "description": "Only needed with more than one Wolf system."
+        },
+        "dry_run": {
+          "name": "Dry run",
+          "description": "Reports what would happen without writing."
+        },
+        "force": {
+          "name": "Force",
+          "description": "Writes even when the parameter is reported read-only."
+        }
       }
     },
     "undo": {
       "name": "Undo",
       "description": "Reverts the most recent changes by writing back the previous values.",
       "fields": {
-        "count": { "name": "Count", "description": "How many changes to revert." },
-        "dry_run": { "name": "Dry run", "description": "Reports what would be reverted." }
+        "count": {
+          "name": "Count",
+          "description": "How many changes to revert."
+        },
+        "dry_run": {
+          "name": "Dry run",
+          "description": "Reports what would be reverted."
+        }
       }
     },
     "snapshot_create": {
       "name": "Create snapshot",
       "description": "Stores the current value of every writable parameter under a name.",
       "fields": {
-        "snapshot": { "name": "Name", "description": "Free choice. An existing name is overwritten." }
+        "snapshot": {
+          "name": "Name",
+          "description": "Free choice. An existing name is overwritten."
+        }
       }
     },
     "snapshot_restore": {
       "name": "Restore snapshot",
       "description": "Writes back every differing value from the snapshot. Creates a snapshot of the current state first.",
       "fields": {
-        "snapshot": { "name": "Name", "description": "Name of the snapshot." },
-        "dry_run": { "name": "Dry run", "description": "Lists what would be written." }
+        "snapshot": {
+          "name": "Name",
+          "description": "Name of the snapshot."
+        },
+        "dry_run": {
+          "name": "Dry run",
+          "description": "Lists what would be written."
+        }
       }
     },
     "snapshot_delete": {
       "name": "Delete snapshot",
       "description": "Removes a stored snapshot.",
       "fields": {
-        "snapshot": { "name": "Name", "description": "Name of the snapshot." }
+        "snapshot": {
+          "name": "Name",
+          "description": "Name of the snapshot."
+        }
       }
     },
     "reload_parameters": {
